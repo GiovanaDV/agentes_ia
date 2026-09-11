@@ -87,7 +87,7 @@ void loop() {
 
     static unsigned long ultimaPublicacao = 0;
 
-    if (millis() - ultimaPublicacao >= 1000) {
+    if (millis() - ultimaPublicacao >= 15000) {
       ultimaPublicacao = millis();
 
       int luminosidade = random(0, 1001);

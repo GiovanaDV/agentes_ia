@@ -1,6 +1,6 @@
 from crewai import Agent, Task, Crew, Process
-
-# recebendo dados do ESP tool ou evento?
+import paho.mqtt.client as mqtt
+import queue
 
 
 analista = Agent(
@@ -62,13 +62,53 @@ equipe = Crew(
     verbose=True
 )
 
+# ===== Conexao com ESP32 via MQTT =====
 
-resultado = equipe.kickoff(
-    inputs={
-        "luminosidade": (
-            "450 lux"
+MQTT_BROKER = "broker.hivemq.com"
+MQTT_PORT = 1883
+MQTT_TOPIC = "topico01"
+
+fila_leituras = queue.Queue()
+
+
+def on_connect(client, userdata, flags, rc):
+    print("Conectado ao broker MQTT, código:", rc)
+    resultado_subscribe = client.subscribe(MQTT_TOPIC)
+    print("Resultado do subscribe (result, mid):", resultado_subscribe)
+
+
+def on_subscribe(client, userdata, mid, granted_qos):
+    print(f"Inscrição confirmada pelo broker! mid={mid}, qos={granted_qos}")
+
+def on_message(client, userdata, msg):
+    valor = msg.payload.decode()
+    print(f"Luminosidade recebida do ESP: {valor}")
+    fila_leituras.put(valor)
+
+
+# versão mais recente do paho-mqtt precisa falar a versão da API de callback ao criar Client - da erro ou warning
+client = mqtt.Client(callback_api_version=mqtt.CallbackAPIVersion.VERSION1)
+client.on_connect = on_connect
+client.on_message = on_message
+client.on_subscribe = on_subscribe
+client.enable_logger() 
+
+client.connect(MQTT_BROKER, MQTT_PORT, 60)
+
+client.loop_start()
+ 
+try:
+    while True:
+        valor = fila_leituras.get()
+ 
+        resultado = equipe.kickoff(
+            inputs={
+                "luminosidade": f"{valor} lux"
+            }
         )
-    }
-)
-
-print(resultado.raw)
+        print(resultado)
+ 
+except KeyboardInterrupt:
+    print("Encerrando...")
+    client.loop_stop()
+    client.disconnect()
